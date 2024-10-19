@@ -1,21 +1,37 @@
-from flask import Flask
-from db import userCollection  # Import the MongoDB collection to ensure the DB connects
-from routes import routes  # Import the routes blueprint
+from flask import Flask, request, jsonify
+from openai import OpenAI
+from routes import routes
+from utils import tokenize_text, embed_chunks, insert_into_database  # Importing functions
 
 app = Flask(__name__)
+client = OpenAI()
 
 # Register the blueprint
 app.register_blueprint(routes)
 
-@app.before_request
-def init_db():
-    """Initialize the database connection before the first request."""
-    try:
-        # Test the connection to MongoDB by querying one document
-        userCollection.find_one()
-        print("MongoDB connection established.")
-    except Exception as e:
-        print(f"Error connecting to MongoDB: {str(e)}")
+@app.route('/api/insertContent', methods=['POST'])
+def insertContent():
+    """Process the audio file, transcribe it, tokenize, embed, and insert into SingleStore."""
+    audiofile = request.files['audiofile']
+    patient_id = request.form['patient_id']
+    
+    # Step 1: Speech to Text transcription
+    transcription = client.audio.transcriptions.create(
+        model="whisper-1",  
+        file=audiofile
+    )
+    transcribed_text = transcription['text']
+    
+    # Tokenize the text with sliding window (wtf is a DSA RAHHHHHH)
+    text_chunks = tokenize_text(transcribed_text)
+    
+    # Embed the chunks
+    embeddings = embed_chunks(text_chunks)
+    
+    # Insert into SingleStore DB
+    insert_into_database(patient_id, text_chunks, embeddings)
+
+    return jsonify({"status": "success", "message": "Data inserted successfully"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
