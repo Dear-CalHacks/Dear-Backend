@@ -50,4 +50,26 @@ def insertContent():
     except Exception as e:
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
-# Add other routes from your original routes.py file here
+@routes.route('/api/getPatientData', methods=['GET']) # W.I.P
+def getPatientData():
+    """Get all data for a specific patient."""
+    try:
+        # Get patient data and any other possible parameters
+        patient_id = request.args.get('patient_id')
+
+        # Ensure that a patient ID is provided
+        if not patient_id:
+            return jsonify({'error': 'Patient ID is required.'}), 400
+
+        # Find the patient in the database
+        patient = patientCollection.find_one({'_id': ObjectId(patient_id)})
+
+        # Check if patient exists
+        if not patient:
+            return jsonify({'error': 'Patient not found.'}), 404
+
+        return jsonify({'data': patient}), 200
+
+    except Exception as e:
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+        
