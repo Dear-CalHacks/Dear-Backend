@@ -12,10 +12,10 @@ const openai = new OpenAI({
 def get_singlestore_connection():
     """Establish a connection to SingleStore DB."""
     connection = connect(
-        host='your_host',
-        user='your_user',
-        password='your_password',
-        database='your_database'
+        host=process.env.SS_HOST_NAME,
+        user=process.env.SS_USERNAME,
+        password=process.env.SS_PASSWORD,
+        database=process.env.SS_DB_NAME
     )
     return connection
 
@@ -34,7 +34,7 @@ def embed_chunks(token_chunks):
     embeddings = []
     for chunk in token_chunks:
         embedding = client.embeddings.create(
-            model="text-embedding-ada-002",  # Replace with your chosen model
+            model="text-embedding-ada-002", 
             input=chunk
         )
         embeddings.append(embedding['data'][0]['embedding'])

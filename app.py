@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from openai import OpenAI
 from routes import routes
-from utils import tokenize_text, embed_chunks, insert_into_database  # Importing functions
+from utils import tokenize_text, embed_chunks, insert_into_database  
 
 app = Flask(__name__)
 client = OpenAI()
