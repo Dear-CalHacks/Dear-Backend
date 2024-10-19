@@ -1,53 +1,45 @@
+import os
+from dotenv import load_dotenv
 from singlestoredb import connect
 import tiktoken
 from openai import OpenAI
 
 client = OpenAI()
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+def load_environment_variables():
+    load_dotenv()
+    global client
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# SingleStore DB connection
 def get_singlestore_connection():
     """Establish a connection to SingleStore DB."""
-    connection = connect(
-        host=process.env.SS_HOST_NAME,
-        user=process.env.SS_USERNAME,
-        password=process.env.SS_PASSWORD,
-        database=process.env.SS_DB_NAME
+    return connect(
+        host=os.getenv('SS_HOST_NAME'),
+        user=os.getenv('SS_USERNAME'),
+        password=os.getenv('SS_PASSWORD'),
+        database=os.getenv('SS_DB_NAME')
     )
-    return connection
 
-# Tokenization method
 def tokenize_text(text, max_token_length=1000):
     """Tokenize the input text into chunks."""
-    tokenizer = tiktoken.get_encoding("gpt-3.5-turbo")  # Load tokenizer
+    tokenizer = tiktoken.get_encoding("gpt-3.5-turbo")
     tokens = tokenizer.encode(text)
-    # Sliding window for chunking
-    token_chunks = [tokens[i:i + max_token_length] for i in range(0, len(tokens), max_token_length)]
-    return token_chunks
+    return [tokens[i:i + max_token_length] for i in range(0, len(tokens), max_token_length)]
 
-# Embedding method
 def embed_chunks(token_chunks):
     """Generate embeddings for each chunk of text."""
-    embeddings = []
-    for chunk in token_chunks:
-        embedding = client.embeddings.create(
-            model="text-embedding-ada-002", 
-            input=chunk
-        )
-        embeddings.append(embedding['data'][0]['embedding'])
-    return embeddings
+    return [
+        client.embeddings.create(model="text-embedding-ada-002", input=chunk)['data'][0]['embedding']
+        for chunk in token_chunks
+    ]
 
-# Insert into SingleStore DB
 def insert_into_database(patient_id, text_chunks, embeddings):
     """Insert the tokenized chunks and embeddings into SingleStore."""
     connection = get_singlestore_connection()
     cursor = connection.cursor()
     
     for text_chunk, embedding in zip(text_chunks, embeddings):
-        embedding_str = ','.join(map(str, embedding))  # Convert list to string for DB insertion
+        embedding_str = ','.join(map(str, embedding))
         query = """
             INSERT INTO your_table_name (patient_id, text_chunk, embedding)
             VALUES (%s, %s, %s)
@@ -57,3 +49,11 @@ def insert_into_database(patient_id, text_chunks, embeddings):
     connection.commit()
     cursor.close()
     connection.close()
+
+def transcribe_audio(audiofile):
+    """Transcribe audio file using OpenAI's Whisper model."""
+    transcription = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audiofile
+    )
+    return transcription.text
