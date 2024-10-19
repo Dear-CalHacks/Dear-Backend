@@ -7,12 +7,12 @@ app = Flask(__name__)
 # Register the blueprint
 app.register_blueprint(routes)
 
-@app.before_first_request
+@app.before_request
 def init_db():
     """Initialize the database connection before the first request."""
     try:
-        # This will trigger the connection to MongoDB
-        userCollection.find_one()  # Test connection by querying one document
+        # Test the connection to MongoDB by querying one document
+        userCollection.find_one()
         print("MongoDB connection established.")
     except Exception as e:
         print(f"Error connecting to MongoDB: {str(e)}")
