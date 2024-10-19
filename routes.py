@@ -146,3 +146,32 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
 
     except Exception as e:
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    
+import requests
+from flask import Blueprint, request, jsonify
+
+
+@routes.route('/api/getNurse/<string:assistant_id>', methods=['GET'])
+def get_nurse(assistant_id):
+    """Retrieve a nurse assistant by ID from the Vapi API."""
+    try:
+        # URL for the Vapi API (with assistant ID)
+        url = f"https://api.vapi.ai/assistant/{assistant_id}"
+        
+        # API Key for authorization (use your actual API key)
+        headers = {
+            "Authorization": f"Bearer {os.getenv('VAPI_API')}"
+        }
+        
+        # Make the GET request to Vapi API
+        response = requests.get(url, headers=headers)
+        
+        # Check for successful response
+        if response.status_code == 200:
+            return jsonify(response.json()), 200
+        else:
+            return jsonify({"error": response.text}), response.status_code
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    
