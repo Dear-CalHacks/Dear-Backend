@@ -39,7 +39,7 @@ def insertContent():
             return jsonify({'error': 'Embedding failed.'}), 500
 
         # Insert into SingleStore
-        insert_result = insert_to_singlestore(patient_id, text_chunks, embeddings)
+        insert_result = insert_to_database(patient_id, text_chunks, embeddings)
 
         # Check if the insertion was successful
         if not insert_result:
@@ -72,4 +72,3 @@ def getPatientData():
 
     except Exception as e:
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-        

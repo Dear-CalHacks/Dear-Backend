@@ -45,6 +45,7 @@ def insert_into_database(patient_id, text_chunks, embeddings):
             VALUES (%s, %s, %s)
         """
         cursor.execute(query, (patient_id, text_chunk, embedding_str))
+
     
     connection.commit()
     cursor.close()
