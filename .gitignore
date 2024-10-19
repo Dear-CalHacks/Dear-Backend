@@ -1,0 +1,43 @@
+# Python related
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.db
+*.sqlite3
+
+# Virtual environment
+venv/
+env/
+env.bak/
+ENV/
+ENV.bak/
+envFlask
+
+# Flask specific
+instance/
+.webassets-cache
+
+# Pytest
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.pot
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment Variables
+.env
+*.env
