@@ -1,9 +1,15 @@
 from flask import Blueprint, jsonify, request
 from db import userCollection, patientCollection
 from bson import ObjectId
-from utils import tokenize_text, embed_chunks, insert_into_database, transcribe_audio
+from utils import tokenize_text, embed_chunks, insert_into_database, transcribe_audio, create_nurse_assistant
+from dotenv import load_dotenv
+from openai import OpenAI
+import os
+import requests
+load_dotenv()
 
 routes = Blueprint('routes', __name__)
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 @routes.route('/api/insertContent', methods=['POST'])
 def insertContent():
@@ -72,3 +78,72 @@ def getPatientData():
 
     except Exception as e:
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+
+
+@routes.route('/api/createNurse', methods=['POST'])
+def create_nurse(): #only once for nurse, then use call_nurse_assistant
+    """Create a new nurse assistant using the Vapi API."""
+    """Create a nurse assistant by making an API call to Vapi."""
+    print("Creating a new nurse assistant...")
+    try:
+        # Extract parameters from the JSON body
+        data = request.json
+        assistant_name = data.get('name', 'Nurse Assistant')
+        first_message = data.get('firstMessage', "Hello! I’m here to help you with any medical-related inquiries.")
+        voice_id = data.get('voiceId', 'en-US-JennyNeural')  # Optional voice parameter
+        server_url = data.get('serverUrl', 'https://your-server-url.com/callback')  # Optional server URL
+
+        # Prepare the data for the Vapi API request
+        vapi_payload = {
+            "name": assistant_name,
+            "firstMessageMode": "assistant-speaks-first",
+            "firstMessage": first_message,
+            "model": {
+                "OpenAIModel": {
+                    "model": "gpt-3.5-turbo"
+                }
+            },
+            "transcriber": {
+                "DeepgramTranscriber": {
+                    "language": "en-US"
+                }
+            },
+            "voice": {
+                "provider": "azure",
+                "voiceId": voice_id,
+                "fillerInjectionEnabled": False,
+                "chunkPlan": {
+                    "enabled": True,
+                    "minCharacters": 30,
+                    "punctuationBoundaries": [".", "!", "?", ","]
+                }
+            },
+            "serverUrl": server_url,
+            "recordingEnabled": True,
+            "hipaaEnabled": True,
+            "clientMessages": ["conversation-update", "transcript", "status-update", "voice-input"],
+            "serverMessages": ["conversation-update", "end-of-call-report", "speech-update"],
+            "silenceTimeoutSeconds": 30,
+            "maxDurationSeconds": 600,
+            "backgroundSound": "office",
+            "backchannelingEnabled": False,
+            "backgroundDenoisingEnabled": True
+        }
+
+        # Send the request to the Vapi API
+        vapi_url = "https://api.vapi.ai/assistant"
+        headers = {
+            "Authorization": f"Bearer {os.getenv('VAPI_API')}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(vapi_url, json=vapi_payload, headers=headers)
+
+        # Check the response from Vapi
+        if response.status_code == 201:
+            return jsonify({"status": "success", "data": response.json()}), 201
+        else:
+            return jsonify({"status": "error", "message": response.text}), response.status_code
+
+    except Exception as e:
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500

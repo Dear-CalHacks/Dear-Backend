@@ -3,13 +3,13 @@ from dotenv import load_dotenv
 from singlestoredb import connect
 import tiktoken
 from openai import OpenAI
+import requests
 
-client = OpenAI()
+load_dotenv()
 
-def load_environment_variables():
-    load_dotenv()
-    global client
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+
 
 def get_singlestore_connection():
     """Establish a connection to SingleStore DB."""
@@ -58,3 +58,50 @@ def transcribe_audio(audiofile):
         file=audiofile
     )
     return transcription.text
+
+
+def create_nurse_assistant(name, first_message):
+    """Create a nurse assistant using the Vapi API."""
+    
+    url = "https://api.vapi.com/assistant"  # Vapi endpoint for creating assistants
+    headers = {
+        "Authorization": f"Bearer {os.getenv('VAPI_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "name": name,
+        "firstMessageMode": "assistant-speaks-first",
+        "firstMessage": first_message,
+        "model": {
+            "OpenAIModel": {
+                "model": "gpt-3.5-turbo"
+            }
+        },
+        "transcriber": {
+            "provider": "deepgram",
+            "model": "nova-2",
+            "language": "en-US"
+        },
+        "voice": {
+            "provider": "cartesia",
+            "voice_id": "replace_with_voice_id",
+            "fillerInjectionEnabled": True,
+
+        },
+        "serverUrl": "https://your-server-url.com/callback",  # Replace with your callback URL
+        "recordingEnabled": True,
+        "hipaaEnabled": True,
+        "clientMessages": ["conversation-update", "transcript", "status-update", "voice-input"],
+        "serverMessages": ["conversation-update", "end-of-call-report", "speech-update"],
+        "silenceTimeoutSeconds": 30,
+        "maxDurationSeconds": 600,
+        "backgroundSound": "office",
+        "backchannelingEnabled": False,
+        "backgroundDenoisingEnabled": True
+    }
+
+    # Send POST request to Vapi API
+    response = requests.post(url, json=data, headers=headers)
+    
+    return response
