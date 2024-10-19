@@ -99,19 +99,18 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
             "firstMessageMode": "assistant-speaks-first",
             "firstMessage": first_message,
             "model": {
-                "OpenAIModel": {
-                    "model": "gpt-3.5-turbo"
-                }
+                "provider": "openai",
+                "model": "gpt-3.5-turbo"
             },
             "transcriber": {
-                "DeepgramTranscriber": {
-                    "language": "en-US"
-                }
+                "provider": "deepgram",
+                "language": "en-US",
+                "model": "nova-2"
             },
             "voice": {
-                "provider": "azure",
-                "voiceId": voice_id,
-                "fillerInjectionEnabled": False,
+                "provider": "cartesia",
+                "voiceId": "ae0c424a-4330-4a0a-bc73-f20448ad7c3c",
+                "fillerInjectionEnabled": True,
                 "chunkPlan": {
                     "enabled": True,
                     "minCharacters": 30,
