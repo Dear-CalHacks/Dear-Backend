@@ -9,23 +9,45 @@ routes = Blueprint('routes', __name__)
 def insertContent():
     """Process the audio file, transcribe it, tokenize, embed, and insert into SingleStore."""
     try:
+        # Get the audio file and patient ID from the request
         audiofile = request.files['audiofile']
         patient_id = request.form['patient_id']
 
-        # Step 1: Speech to Text transcription
-        transcribed_text = transcribe_audio(audiofile)
+        # Ensure that an audio file and patient ID are provided
+        if not audiofile or not patient_id:
+            return jsonify({'error': 'Audio file and patient ID are required.'}), 400
 
-        # Step 2: Tokenize the text
-        text_chunks = tokenize_text(transcribed_text)
+        # Transcribe the audio file to text
+        transcription = transcribe_audio(audiofile)
+        
+        # Check if transcription was successful
+        if not transcription:
+            return jsonify({'error': 'Audio transcription failed.'}), 500
 
-        # Step 3: Embed the chunks
+        # Tokenize the transcription into chunks
+        text_chunks = tokenize_text(transcription)
+
+        # Check if tokenization was successful
+        if not text_chunks:
+            return jsonify({'error': 'Tokenization failed.'}), 500
+
+        # Embed the text chunks
         embeddings = embed_chunks(text_chunks)
 
-        # Step 4: Insert into SingleStore DB
-        insert_into_database(patient_id, text_chunks, embeddings)
+        # Check if embedding was successful
+        if not embeddings:
+            return jsonify({'error': 'Embedding failed.'}), 500
 
-        return jsonify({"status": "success", "message": "Data inserted successfully"})
+        # Insert into SingleStore
+        insert_result = insert_to_singlestore(patient_id, text_chunks, embeddings)
+
+        # Check if the insertion was successful
+        if not insert_result:
+            return jsonify({'error': 'Database insertion failed.'}), 500
+
+        return jsonify({'message': 'Content inserted successfully.'}), 200
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 # Add other routes from your original routes.py file here

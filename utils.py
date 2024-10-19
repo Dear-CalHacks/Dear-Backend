@@ -24,7 +24,7 @@ def tokenize_text(text, max_token_length=1000):
     """Tokenize the input text into chunks."""
     tokenizer = tiktoken.get_encoding("gpt-3.5-turbo")
     tokens = tokenizer.encode(text)
-    return [tokens[i:i + max_token_length] for i in range(0, len(tokens), max_token_length)]
+    return [tokens[i:i + max_token_length] for i in range(0, len(tokens), max_token_length)] # wtf is a DSA RAAAAAAH
 
 def embed_chunks(token_chunks):
     """Generate embeddings for each chunk of text."""
