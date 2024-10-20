@@ -154,7 +154,7 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
     except Exception as e:
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
     
-@routes.route('/cartesia/cloneVoice', methods=['POST'])
+@routes.route('/cartesia/cloneVoice', methods=['POST']) #cartesia voice clone
 def clone_voice():
     """Creates a unique voice using an audio clip sent to the Cartesia API."""
     cartesia_clone_url = "https://api.cartesia.ai/voices/clone/clip"
@@ -191,16 +191,23 @@ def clone_voice():
     try:
         response = requests.post(cartesia_clone_url, headers=headers, files=files, data=payload)
         
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Return the response from the Cartesia API (e.g., unique voice ID)
-            return jsonify({"message": "Voice created successfully", "data": response.json()}), 200
-        else:
-            return jsonify({"error": "Failed to create voice", "details": response.text}), response.status_code
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": "An error occurred while creating the voice", "details": str(e)}), 500
+        # Log the response status code for debugging
+        print(f"Response status code: {response.status_code}")
+        print(f"Response data: {response.text}")
 
-@routes.route('/cartesia/createVoice', methods=['POST'])
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            return jsonify({"message": "Voice created successfully", "data": response.json()}), 200
+        elif response.status_code >= 400:
+            # Handle any specific error cases with the status code and response data
+            return jsonify({"error": "Failed to create voice", "details": response.json()}), response.status_code
+        else:
+            # Handle other status codes if necessary
+            return jsonify({"error": "Unexpected error", "details": response.text}), response.status_code
+    except requests.exceptions.RequestException as e:
+        # Handle any exceptions that occur during the request
+        return jsonify({"error": "An error occurred while creating the voice", "details": str(e)}), 500
+@routes.route('/cartesia/createVoice', methods=['POST']) #cartesia voice creation after clone embedding
 def create_voice():
     """Creates a voice by sending a request to the Cartesia API with a given embedding."""
     print('hello')
@@ -255,7 +262,7 @@ def create_voice():
             "details": str(e)
         }), 500
 
-@routes.route('/voice/createFamily/<string:family_id>', methods=['POST'])
+@routes.route('/voice/createFamily/<string:family_id>', methods=['POST']) #create family member with cartesia argument
 def create_family(family_id):
     """Create a family member dynamically using the Vapi API, with their voice and family_id from Cartesia."""
     try:
@@ -323,7 +330,7 @@ def create_family(family_id):
     except Exception as e:
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
-@routes.route('/voice/getNurse/<string:assistant_id>', methods=['GET'])
+@routes.route('/voice/getNurse/<string:assistant_id>', methods=['GET']) #get nurse assistant
 def get_nurse(assistant_id):
     """Retrieve a nurse assistant by ID from the Vapi API."""
     try:
@@ -347,7 +354,7 @@ def get_nurse(assistant_id):
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     
-@routes.route('/voice/initiateCall/<string:assistant_id>', methods=['POST'])
+@routes.route('/voice/initiateCall/<string:assistant_id>', methods=['POST']) #initiate call with nurse
 def initiate_call(assistant_id):
     """Initiates a call with a specific agent using the Vapi API."""
     try:
@@ -392,7 +399,7 @@ def initiate_call(assistant_id):
     except Exception as e:
         return jsonify({"error": f"An error occurred while initiating the call: {str(e)}"}), 500
 
-@routes.route('/voice/endCall/<string:assistant_id>', methods=['POST'])
+@routes.route('/voice/endCall/<string:assistant_id>', methods=['POST']) #end call with nurse
 def end_call(assistant_id):
     """Ends an ongoing call with a specific agent using the Vapi API."""
     try:
@@ -416,4 +423,3 @@ def end_call(assistant_id):
 
     except Exception as e:
         return jsonify({"error": f"An error occurred while ending the call: {str(e)}"}), 500
-

@@ -2,9 +2,10 @@ from flask import Flask
 from openai import OpenAI
 from routes import routes
 from dotenv import load_dotenv
+from flask_cors import CORS
 
 app = Flask(__name__)
-
+CORS(app)
 # Load environment variables
 load_dotenv()
 
