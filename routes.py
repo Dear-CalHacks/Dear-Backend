@@ -347,3 +347,73 @@ def get_nurse(assistant_id):
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
     
+@routes.route('/voice/initiateCall/<string:assistant_id>', methods=['POST'])
+def initiate_call(assistant_id):
+    """Initiates a call with a specific agent using the Vapi API."""
+    try:
+        # Extract the user or patient message from the request
+        user_message = request.json.get('message', 'Hello, can you assist me?')
+        
+        # Prepare the payload for initiating the call
+        vapi_call_payload = {
+            "assistantId": assistant_id,
+            "message": {
+                "role": "user",
+                "content": user_message
+            },
+            "voice": {
+                "provider": "cartesia",
+                "voiceId": "ae0c424a-4330-4a0a-bc73-f20448ad7c3c"  # Use appropriate voiceId
+            },
+            "transcriber": {
+                "provider": "deepgram",
+                "language": "en-US"
+            }
+        }
+
+        # Vapi API endpoint for initiating a conversation
+        vapi_url = f"https://api.vapi.ai/assistant/{assistant_id}/conversation"
+
+        # Set the headers for the Vapi API request
+        headers = {
+            "Authorization": f"Bearer {os.getenv('VAPI_API')}",
+            "Content-Type": "application/json"
+        }
+
+        # Send the POST request to Vapi's API to initiate the conversation
+        response = requests.post(vapi_url, json=vapi_call_payload, headers=headers)
+
+        # Check the response from Vapi
+        if response.status_code == 200:
+            return jsonify({"status": "success", "data": response.json()}), 200
+        else:
+            return jsonify({"error": f"Failed to initiate call: {response.text}"}), response.status_code
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred while initiating the call: {str(e)}"}), 500
+
+@routes.route('/voice/endCall/<string:assistant_id>', methods=['POST'])
+def end_call(assistant_id):
+    """Ends an ongoing call with a specific agent using the Vapi API."""
+    try:
+        # Vapi API endpoint for ending the conversation
+        vapi_end_url = f"https://api.vapi.ai/assistant/{assistant_id}/conversation/end"
+
+        # Set the headers for the Vapi API request
+        headers = {
+            "Authorization": f"Bearer {os.getenv('VAPI_API')}",
+            "Content-Type": "application/json"
+        }
+
+        # Send the POST request to Vapi's API to end the conversation
+        response = requests.post(vapi_end_url, headers=headers)
+
+        # Check the response from Vapi
+        if response.status_code == 200:
+            return jsonify({"status": "success", "message": "Call ended successfully."}), 200
+        else:
+            return jsonify({"error": f"Failed to end call: {response.text}"}), response.status_code
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred while ending the call: {str(e)}"}), 500
+
