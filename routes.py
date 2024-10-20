@@ -255,8 +255,6 @@ def create_voice():
             "details": str(e)
         }), 500
 
-
-
 @routes.route('/voice/createFamily/<string:family_id>', methods=['POST'])
 def create_family(family_id):
     """Create a family member dynamically using the Vapi API, with their voice and family_id from Cartesia."""
