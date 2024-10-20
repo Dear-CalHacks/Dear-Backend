@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from db import userCollection, patientCollection
+from db import insert_family_member, get_family_members, deardb
 from bson import ObjectId
 from utils import tokenize_text, embed_chunks, insert_into_database, transcribe_audio, create_nurse_assistant
 from dotenv import load_dotenv
@@ -7,254 +7,43 @@ from openai import OpenAI
 import os
 import requests
 from werkzeug.utils import secure_filename
+from utils import create_custom_assistant, process_audio_and_update_voice_id
+
 load_dotenv()
 
 routes = Blueprint('routes', __name__)
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 cartesia_key = os.getenv('CARTESIA_API_KEY')
 vapi_api_key = os.getenv('VAPI_API')
-# Allowed audio extensions
-ALLOWED_EXTENSIONS = {'wav', 'mp3', 'm4a', 'ogg', 'flac'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@routes.route('/voice/createFamilyNext', methods=['POST'])
-def create_family_next():
-    try:
-        # Check if the request contains the audio file and form fields
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
-
-        audio_file = request.files['audio']
-        if audio_file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-
-        if not allowed_file(audio_file.filename):
-            return jsonify({'error': 'Unsupported file type'}), 400
-
-        # Get form fields
-        family_id = request.form.get('family_id')
-        name = request.form.get('name', 'Family Member')
-        description = request.form.get('description', 'Family member voice')
-        language = request.form.get('language', 'en')
-
-        if not family_id:
-            return jsonify({'error': 'family_id is required'}), 400
-
-        # Secure the filename
-        filename = secure_filename(audio_file.filename)
-        temp_audio_path = os.path.join('/tmp', filename)
-        audio_file.save(temp_audio_path)
-
-        try:
-            # Step 1: Clone Voice
-            embedding = clone_voice(temp_audio_path)
-            if not embedding:
-                return jsonify({'error': 'Failed to clone voice'}), 500
-
-            # Step 2: Create Voice
-            voice_id = create_voice(name, description, embedding, language)
-            if not voice_id:
-                return jsonify({'error': 'Failed to create voice'}), 500
-
-            # Step 3: Create Family Assistant
-            assistant_id = create_family_assistant(family_id, voice_id)
-            if not assistant_id:
-                return jsonify({'error': 'Failed to create family assistant'}), 500
-
-            # Return success response
-            return jsonify({
-                'message': 'Family assistant created successfully',
-                'assistantId': assistant_id
-            }), 200
-
-        finally:
-            # Clean up the temporary audio file
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-
-    except Exception as e:
-        print(f"Error in create_family_next: {str(e)}")
-        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-    
-
-def clone_voice(audio_path):
-    try:
-        cartesia_clone_url = "https://api.cartesia.ai/voices/clone/clip"
-        headers = {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": cartesia_key
-        }
-
-        with open(audio_path, 'rb') as audio_file:
-            files = {'clip': (os.path.basename(audio_path), audio_file, 'audio/wav')}
-            payload = {'enhance': 'true'}
-            response = requests.post(cartesia_clone_url, headers=headers, files=files, data=payload)
-
-        if response.status_code == 200:
-            embedding = response.json().get('embedding')
-            return embedding
-        else:
-            print(f"Clone Voice Error: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Exception in clone_voice: {str(e)}")
-        return None
-
-
-def create_voice(name, description, embedding, language):
-    try:
-        cartesia_voice_url = "https://api.cartesia.ai/voices"
-        headers = {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": cartesia_key,
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "name": name,
-            "description": description,
-            "embedding": embedding,
-            "language": language
-        }
-        response = requests.post(cartesia_voice_url, headers=headers, json=payload)
-
-        if response.status_code == 200:
-            voice_id = response.json().get('id')  # Adjust key if different
-            return voice_id
-        else:
-            print(f"Create Voice Error: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Exception in create_voice: {str(e)}")
-        return None
-
-def create_family_assistant(family_id, voice_id):
-    try:
-        vapi_url = "https://api.vapi.ai/assistant"
-        headers = {
-            "Authorization": f"Bearer {vapi_api_key}",
-            "Content-Type": "application/json"
-        }
-        assistant_name = f"Family Member {family_id}"
-        first_message = f"Hello! I am your family member {family_id}. How can I help you today?"
-        vapi_payload = {
-            "name": assistant_name,
-            "firstMessageMode": "assistant-speaks-first",
-            "firstMessage": first_message,
-            "model": {
-                "provider": "openai",
-                "model": "gpt-3.5-turbo"
-            },
-            "transcriber": {
-                "provider": "deepgram",
-                "language": "en-US",
-                "model": "nova-2"
-            },
-            "voice": {
-                "provider": "cartesia",
-                "voiceId": voice_id,
-                "fillerInjectionEnabled": True,
-                "chunkPlan": {
-                    "enabled": True,
-                    "minCharacters": 30,
-                    "punctuationBoundaries": [".", "!", "?", ","]
-                }
-            },
-            "recordingEnabled": True,
-            "hipaaEnabled": True,
-            "clientMessages": ["conversation-update", "transcript", "status-update", "voice-input"],
-            "serverMessages": ["conversation-update", "end-of-call-report", "speech-update"],
-            "silenceTimeoutSeconds": 30,
-            "maxDurationSeconds": 600,
-            "backgroundSound": "office",
-            "backchannelingEnabled": False,
-            "backgroundDenoisingEnabled": True
-        }
-        response = requests.post(vapi_url, headers=headers, json=vapi_payload)
-
-        if response.status_code == 201:
-            assistant_id = response.json().get('id')  # Adjust key if different
-            return assistant_id
-        else:
-            print(f"Create Family Assistant Error: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Exception in create_family_assistant: {str(e)}")
-        return None
 
 @routes.route('/', methods=['GET'])
 def home():
     return "hello"
     
-@routes.route('/db/insertContent', methods=['POST'])
-def insertContent():
-    """Process the audio file, transcribe it, tokenize, embed, and insert into SingleStore."""
+
+
+@routes.route('/db/insertFamilyMember', methods=['POST'])  # W.I.P
+def insertFamilyMember():
+    """Insert a family member into MongoDB."""
+    data = request.json
+    result = insert_family_member(data)
+    return jsonify({"success": True, "id": str(result.inserted_id)}), 201
+
+
+@routes.route('/db/getFamilyMembers/<string:patient_id>', methods=['GET'])
+def getFamilyMembers(patient_id):
+    """Get all family members for a specific patient."""
     try:
-        # Get the audio file and patient ID from the request
-        audiofile = request.files['audiofile']
-        patient_id = request.form['patient_id']
+        family_members = list(familyCollection.find({'patient_id': patient_id}))
+        for member in family_members:
+            member['_id'] = str(member['_id'])  # Convert ObjectId to string
+            member.pop('audio', None)  # Remove audio content from the response
 
-        # Ensure that an audio file and patient ID are provided
-        if not audiofile or not patient_id:
-            return jsonify({'error': 'Audio file and patient ID are required.'}), 400
-
-        # Transcribe the audio file to text
-        transcription = transcribe_audio(audiofile)
-        
-        # Check if transcription was successful
-        if not transcription:
-            return jsonify({'error': 'Audio transcription failed.'}), 500
-
-        # Tokenize the transcription into chunks
-        text_chunks = tokenize_text(transcription)
-
-        # Check if tokenization was successful
-        if not text_chunks:
-            return jsonify({'error': 'Tokenization failed.'}), 500
-
-        # Embed the text chunks
-        embeddings = embed_chunks(text_chunks)
-
-        # Check if embedding was successful
-        if not embeddings:
-            return jsonify({'error': 'Embedding failed.'}), 500
-
-        # Insert into SingleStore
-        insert_result = insert_into_database(patient_id, text_chunks, embeddings)
-
-        # Check if the insertion was successful
-        if not insert_result:
-            return jsonify({'error': 'Database insertion failed.'}), 500
-
-        return jsonify({'message': 'Content inserted successfully.'}), 200
-
+        return jsonify({"success": True, "data": family_members}), 200
     except Exception as e:
+        print(f"Error in getFamilyMembers: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-
-@routes.route('/db/getPatientData', methods=['GET']) # W.I.P
-def getPatientData():
-    """Get all data for a specific patient."""
-    try:
-        # Get patient data and any other possible parameters
-        patient_id = request.args.get('patient_id')
-
-        # Ensure that a patient ID is provided
-        if not patient_id:
-            return jsonify({'error': 'Patient ID is required.'}), 400
-
-        # Find the patient in the database
-        patient = patientCollection.find_one({'_id': ObjectId(patient_id)})
-
-        # Check if patient exists
-        if not patient:
-            return jsonify({'error': 'Patient not found.'}), 404
-
-        return jsonify({'data': patient}), 200
-
-    except Exception as e:
-        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-
 
 @routes.route('/voice/createNurse', methods=['POST'])
 def create_nurse(): #only once for nurse, then use call_nurse_assistant
@@ -374,8 +163,9 @@ def clone_voice():
     except requests.exceptions.RequestException as e:
         # Handle any exceptions that occur during the request
         return jsonify({"error": "An error occurred while creating the voice", "details": str(e)}), 500
+    
 @routes.route('/cartesia/createVoice', methods=['POST']) #cartesia voice creation after clone embedding
-def create_voice():
+def create_voice(name, description, embedding, language):
     """Creates a voice by sending a request to the Cartesia API with a given embedding."""
     print('hello')
     # Get the data from the POST request
@@ -428,6 +218,55 @@ def create_voice():
             "error": "An error occurred while creating the voice", 
             "details": str(e)
         }), 500
+
+@routes.route('/db/insertFamilyMember', methods=['POST'])
+def insert_family_member_route():
+    """Insert a family member into MongoDB and process the audio."""
+    try:
+        # Check if the request contains the audio file and form fields
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No selected audio file'}), 400
+
+        # Get form fields
+        patient_id = request.form.get('patient_id')
+        name = request.form.get('name')
+        age = request.form.get('age')
+        relation = request.form.get('relation')
+        memories = request.form.get('memories')
+        language = request.form.get('language', 'en')
+
+        if not all([patient_id, name, age, relation, memories]):
+            return jsonify({'error': 'Missing required form fields'}), 400
+
+        # Read the audio file content
+        audio_content = audio_file.read()
+
+        # Insert data into MongoDB
+        family_member = {
+            'patient_id': patient_id,
+            'name': name,
+            'age': age,
+            'relation': relation,
+            'memories': memories,
+            'language': language,
+            'audio': audio_content,  # Store audio content in MongoDB
+            'voice_id': None  # Will update after processing
+        }
+        result = familyCollection.insert_one(family_member)
+        inserted_id = result.inserted_id
+
+        # Process audio and update voice ID
+        process_audio_and_update_voice_id(inserted_id)
+
+        return jsonify({'success': True, 'id': str(inserted_id)}), 201
+
+    except Exception as e:
+        print(f"Error in insert_family_member_route: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 @routes.route('/voice/createFamily/<string:family_id>', methods=['POST']) #create family member with cartesia argument
 def create_family(family_id):
@@ -591,3 +430,67 @@ def end_call(assistant_id):
 
     except Exception as e:
         return jsonify({"error": f"An error occurred while ending the call: {str(e)}"}), 500
+
+@routes.route('/createCustomAssistant', methods=['POST'])
+def create_custom_assistant_route():
+    try:
+        # Check if the request contains the audio file and form fields
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No selected audio file'}), 400
+
+        # Get form fields
+        family_id = request.form.get('patient_id')
+        name = request.form.get('name', 'Family Member')
+        description = request.form.get('memories', 'Family member voice')
+        language = request.form.get('language', 'en')
+        age = request.form.get('age')
+        relation = request.form.get('relation')
+
+        if not family_id:
+            return jsonify({'error': 'patient_id is required'}), 400
+
+        # Save the audio file temporarily
+        filename = secure_filename(audio_file.filename)
+        temp_audio_path = os.path.join('/tmp', filename)
+        audio_file.save(temp_audio_path)
+
+        try:
+            # Call the service layer function
+            assistant_id, error = create_custom_assistant(
+                temp_audio_path, family_id, name, description, language
+            )
+
+            if error:
+                return jsonify({'error': error}), 500
+
+            # Save additional data to MongoDB
+            new_family_member = {
+                'patient_id': family_id,
+                'name': name,
+                'age': age,
+                'relation': relation,
+                'memories': description,
+                'assistant_id': assistant_id
+            }
+            # Insert into MongoDB
+            # Assuming you have a collection called `familyCollection`
+            deardb.insert_one(new_family_member)
+
+            # Return success response
+            return jsonify({
+                'message': 'Custom assistant created and data saved successfully',
+                'assistantId': assistant_id
+            }), 200
+
+        finally:
+            # Clean up the temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
+    except Exception as e:
+        print(f"Error in create_custom_assistant_route: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500

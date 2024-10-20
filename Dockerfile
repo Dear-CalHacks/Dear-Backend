@@ -18,7 +18,7 @@ ENV FLASK_APP=app.py
 ENV FLASK_RUN_HOST=0.0.0.0
 
 # Expose the port the app runs on
-EXPOSE 8080
+EXPOSE 8700
 
 # Run the application
 CMD ["flask", "run", "--port=8080"]
