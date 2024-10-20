@@ -37,7 +37,10 @@ def insertFamilyMember():
 def getFamilyMembers(patient_id):
     """Get all family members for a specific patient."""
     try:
-        family_members = list(familyCollection.find({'patient_id': patient_id}))
+        family_members = list(deardb.find({'patient_id': patient_id}))
+        if not family_members:
+            return jsonify({"success": False, "message": "No family members found for this patient"}), 404
+        
         for member in family_members:
             member['_id'] = str(member['_id'])  # Convert ObjectId to string
             member.pop('audio', None)  # Remove audio content from the response
@@ -46,7 +49,7 @@ def getFamilyMembers(patient_id):
     except Exception as e:
         print(f"Error in getFamilyMembers: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-
+    
 @routes.route('/voice/createNurse', methods=['POST'])
 def create_nurse(): #only once for nurse, then use call_nurse_assistant
     """Create a nurse assistant by making an API call to Vapi."""
@@ -269,7 +272,6 @@ def insert_family_member_route():
     except Exception as e:
         print(f"Error in insert_family_member_route: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-
 @routes.route('/voice/createFamily/<string:family_id>', methods=['POST']) #create family member with cartesia argument
 def create_family(family_id):
     """Create a family member dynamically using the Vapi API, with their voice and family_id from Cartesia."""

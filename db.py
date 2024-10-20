@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import os
 
 # MongoDB connection setup
-MONGO_URI = 'mongodb+srv://rkalaa:knCq2zLWVFjVR2rh@deardb.bj6mx.mongodb.net/?retryWrites=true&w=majority&appName=deardb'
+MONGO_URI = 'mongodb+srv://rkalaa:knCq2zLWVFjVR2rh@deardb.bj6mx.mongodb.net/?retryWrites=true&w=majority&appName=deardb&ssl=true&ssl_cert_reqs=CERT_NONE'
 
 client = MongoClient(MONGO_URI)
 

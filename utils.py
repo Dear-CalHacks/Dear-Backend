@@ -116,30 +116,41 @@ def clone_voice(audio_path):
         return None
 
 def create_voice(name, description, embedding, language):
+    """Creates a voice by sending a request to the Cartesia API with a given embedding."""
     try:
+        # Set the Cartesia API URL
         cartesia_voice_url = "https://api.cartesia.ai/voices"
-        headers = {
-            "Cartesia-Version": "2024-06-10",
-            "X-API-Key": cartesia_key,
-            "Content-Type": "application/json"
-        }
+
+        # Prepare the payload for the Cartesia API
         payload = {
             "name": name,
             "description": description,
             "embedding": embedding,
             "language": language
         }
-        response = requests.post(cartesia_voice_url, headers=headers, json=payload)
+
+        # Set the headers for the Cartesia API request
+        headers = {
+            "Cartesia-Version": "2024-06-10",
+            "X-API-Key": os.getenv('CARTESIA_API_KEY'),
+            "Content-Type": "application/json"
+        }
+
+        # Send the POST request to the Cartesia API to create the voice
+        response = requests.post(cartesia_voice_url, json=payload, headers=headers)
 
         if response.status_code == 200:
-            voice_id = response.json().get('id')  # Adjust key if different
-            return voice_id
+            data = response.json()
+            voice_id = data.get('id')
+            if voice_id:
+                return {'success': True, 'voice_id': voice_id}
+            else:
+                return {'success': False, 'error': 'No voice ID returned from create voice'}
         else:
-            print(f"Create Voice Error: {response.text}")
-            return None
+            return {'success': False, 'error': response.text}
+
     except Exception as e:
-        print(f"Exception in create_voice: {str(e)}")
-        return None
+        return {'success': False, 'error': str(e)}
 
 def create_family_assistant(family_id, voice_id):
     try:
@@ -221,7 +232,48 @@ def create_custom_assistant(audio_file_path, family_id, name, description, langu
         print(f"Error in create_custom_assistant: {str(e)}")
         return None, f'An unexpected error occurred: {str(e)}'
     
+
 def process_audio_and_update_voice_id(family_member_id):
+    """Process the audio of a family member and update the voice ID."""
+    try:
+        # Retrieve the family member from the database
+        family_member = familyCollection.find_one({'_id': ObjectId(family_member_id)})
+        if not family_member:
+            print(f"Family member with ID {family_member_id} not found.")
+            return
+
+        audio_content = family_member.get('audio')
+        if not audio_content:
+            print(f"No audio content found for family member with ID {family_member_id}.")
+            return
+
+        name = family_member.get('name')
+        description = family_member.get('memories')
+        language = family_member.get('language', 'en')
+
+        # Call Cartesia clone voice API with the audio content
+        clone_response = clone_voice_cartesia(audio_content)
+        if not clone_response['success']:
+            print(f"Failed to clone voice: {clone_response['error']}")
+            return
+
+        embedding = clone_response['embedding']
+
+        # Call create_voice with the embedding
+        create_response = create_voice(name, description, embedding, language)
+        if not create_response['success']:
+            print(f"Failed to create voice: {create_response['error']}")
+            return
+
+        voice_id = create_response['voice_id']
+
+        # Update the family member document with the voice ID
+        familyCollection.update_one({'_id': ObjectId(family_member_id)}, {'$set': {'voice_id': voice_id}})
+
+        print(f"Voice created successfully with ID {voice_id}")
+
+    except Exception as e:
+        print(f"Error in process_audio_and_update_voice_id: {str(e)}")
     try:
         # Retrieve the family member from MongoDB
         family_member = familyCollection.find_one({'_id': ObjectId(family_member_id)})
@@ -267,3 +319,39 @@ def process_audio_and_update_voice_id(family_member_id):
 
     except Exception as e:
         print(f"Error in process_audio_and_update_voice_id: {str(e)}")
+def clone_voice_cartesia(audio_content):
+    """Calls the Cartesia clone voice API with the audio content."""
+    try:
+        cartesia_clone_url = "https://api.cartesia.ai/voices/clone/clip"
+
+        # Set the headers for the Cartesia API request
+        headers = {
+            "Cartesia-Version": "2024-06-10",
+            "X-API-Key": os.getenv('CARTESIA_API_KEY')
+        }
+
+        # Prepare the files payload for the Cartesia API request
+        files = {
+            'clip': ('audio.wav', io.BytesIO(audio_content), 'audio/wav')
+        }
+
+        # Prepare the data payload
+        data = {
+            'enhance': 'true'
+        }
+
+        # Send the POST request to Cartesia's API to create a unique voice
+        response = requests.post(cartesia_clone_url, headers=headers, files=files, data=data)
+
+        if response.status_code == 200:
+            data = response.json()
+            embedding = data.get('embedding')
+            if embedding:
+                return {'success': True, 'embedding': embedding}
+            else:
+                return {'success': False, 'error': 'No embedding returned from clone'}
+        else:
+            return {'success': False, 'error': response.text}
+
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
