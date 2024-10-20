@@ -11,7 +11,7 @@ load_dotenv()
 routes = Blueprint('routes', __name__)
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-@routes.route('/api/insertContent', methods=['POST'])
+@routes.route('/db/insertContent', methods=['POST'])
 def insertContent():
     """Process the audio file, transcribe it, tokenize, embed, and insert into SingleStore."""
     try:
@@ -56,7 +56,7 @@ def insertContent():
     except Exception as e:
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
-@routes.route('/api/getPatientData', methods=['GET']) # W.I.P
+@routes.route('/db/getPatientData', methods=['GET']) # W.I.P
 def getPatientData():
     """Get all data for a specific patient."""
     try:
@@ -80,7 +80,7 @@ def getPatientData():
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 
-@routes.route('/api/createNurse', methods=['POST'])
+@routes.route('/voice/createNurse', methods=['POST'])
 def create_nurse(): #only once for nurse, then use call_nurse_assistant
     """Create a new nurse assistant using the Vapi API."""
     """Create a nurse assistant by making an API call to Vapi."""
@@ -151,7 +151,7 @@ import requests
 from flask import Blueprint, request, jsonify
 
 
-@routes.route('/api/getNurse/<string:assistant_id>', methods=['GET'])
+@routes.route('/voice/getNurse/<string:assistant_id>', methods=['GET'])
 def get_nurse(assistant_id):
     """Retrieve a nurse assistant by ID from the Vapi API."""
     try:
