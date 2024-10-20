@@ -6,11 +6,182 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import os
 import requests
+from werkzeug.utils import secure_filename
 load_dotenv()
 
 routes = Blueprint('routes', __name__)
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 cartesia_key = os.getenv('CARTESIA_API_KEY')
+vapi_api_key = os.getenv('VAPI_API')
+# Allowed audio extensions
+ALLOWED_EXTENSIONS = {'wav', 'mp3', 'm4a', 'ogg', 'flac'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@routes.route('/voice/createFamilyNext', methods=['POST'])
+def create_family_next():
+    try:
+        # Check if the request contains the audio file and form fields
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        if not allowed_file(audio_file.filename):
+            return jsonify({'error': 'Unsupported file type'}), 400
+
+        # Get form fields
+        family_id = request.form.get('family_id')
+        name = request.form.get('name', 'Family Member')
+        description = request.form.get('description', 'Family member voice')
+        language = request.form.get('language', 'en')
+
+        if not family_id:
+            return jsonify({'error': 'family_id is required'}), 400
+
+        # Secure the filename
+        filename = secure_filename(audio_file.filename)
+        temp_audio_path = os.path.join('/tmp', filename)
+        audio_file.save(temp_audio_path)
+
+        try:
+            # Step 1: Clone Voice
+            embedding = clone_voice(temp_audio_path)
+            if not embedding:
+                return jsonify({'error': 'Failed to clone voice'}), 500
+
+            # Step 2: Create Voice
+            voice_id = create_voice(name, description, embedding, language)
+            if not voice_id:
+                return jsonify({'error': 'Failed to create voice'}), 500
+
+            # Step 3: Create Family Assistant
+            assistant_id = create_family_assistant(family_id, voice_id)
+            if not assistant_id:
+                return jsonify({'error': 'Failed to create family assistant'}), 500
+
+            # Return success response
+            return jsonify({
+                'message': 'Family assistant created successfully',
+                'assistantId': assistant_id
+            }), 200
+
+        finally:
+            # Clean up the temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
+    except Exception as e:
+        print(f"Error in create_family_next: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+    
+
+def clone_voice(audio_path):
+    try:
+        cartesia_clone_url = "https://api.cartesia.ai/voices/clone/clip"
+        headers = {
+            "Cartesia-Version": "2024-06-10",
+            "X-API-Key": cartesia_key
+        }
+
+        with open(audio_path, 'rb') as audio_file:
+            files = {'clip': (os.path.basename(audio_path), audio_file, 'audio/wav')}
+            payload = {'enhance': 'true'}
+            response = requests.post(cartesia_clone_url, headers=headers, files=files, data=payload)
+
+        if response.status_code == 200:
+            embedding = response.json().get('embedding')
+            return embedding
+        else:
+            print(f"Clone Voice Error: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception in clone_voice: {str(e)}")
+        return None
+
+
+def create_voice(name, description, embedding, language):
+    try:
+        cartesia_voice_url = "https://api.cartesia.ai/voices"
+        headers = {
+            "Cartesia-Version": "2024-06-10",
+            "X-API-Key": cartesia_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "name": name,
+            "description": description,
+            "embedding": embedding,
+            "language": language
+        }
+        response = requests.post(cartesia_voice_url, headers=headers, json=payload)
+
+        if response.status_code == 200:
+            voice_id = response.json().get('id')  # Adjust key if different
+            return voice_id
+        else:
+            print(f"Create Voice Error: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception in create_voice: {str(e)}")
+        return None
+
+def create_family_assistant(family_id, voice_id):
+    try:
+        vapi_url = "https://api.vapi.ai/assistant"
+        headers = {
+            "Authorization": f"Bearer {vapi_api_key}",
+            "Content-Type": "application/json"
+        }
+        assistant_name = f"Family Member {family_id}"
+        first_message = f"Hello! I am your family member {family_id}. How can I help you today?"
+        vapi_payload = {
+            "name": assistant_name,
+            "firstMessageMode": "assistant-speaks-first",
+            "firstMessage": first_message,
+            "model": {
+                "provider": "openai",
+                "model": "gpt-3.5-turbo"
+            },
+            "transcriber": {
+                "provider": "deepgram",
+                "language": "en-US",
+                "model": "nova-2"
+            },
+            "voice": {
+                "provider": "cartesia",
+                "voiceId": voice_id,
+                "fillerInjectionEnabled": True,
+                "chunkPlan": {
+                    "enabled": True,
+                    "minCharacters": 30,
+                    "punctuationBoundaries": [".", "!", "?", ","]
+                }
+            },
+            "recordingEnabled": True,
+            "hipaaEnabled": True,
+            "clientMessages": ["conversation-update", "transcript", "status-update", "voice-input"],
+            "serverMessages": ["conversation-update", "end-of-call-report", "speech-update"],
+            "silenceTimeoutSeconds": 30,
+            "maxDurationSeconds": 600,
+            "backgroundSound": "office",
+            "backchannelingEnabled": False,
+            "backgroundDenoisingEnabled": True
+        }
+        response = requests.post(vapi_url, headers=headers, json=vapi_payload)
+
+        if response.status_code == 201:
+            assistant_id = response.json().get('id')  # Adjust key if different
+            return assistant_id
+        else:
+            print(f"Create Family Assistant Error: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception in create_family_assistant: {str(e)}")
+        return None
 
 @routes.route('/', methods=['GET'])
 def home():
@@ -91,20 +262,16 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
     print("Creating a new nurse assistant...")
     try:
         # Extract parameters from the JSON body
-        data = request.json
         assistant_name = "Nurse Assistant Hub"
-        first_message = data.get('firstMessage', "Hello! I am your nurse assistant. How can I help you today?")
-        voice_id = data.get('voiceId', 'en-US-JennyNeural')  # Optional voice parameter
-        server_url = data.get('serverUrl', 'https://your-server-url.com/callback')  # Optional server URL
+        first_message = "Hello! I am your nurse assistant. How can I help you today?"
+        voice_id = "emma"  # Optional voice parameter
+        server_url = "https://your-server-url.com/callback"  # Optional server URL
 
         # Prepare the data for the Vapi API request
         vapi_payload = {
             "name": assistant_name,
             "firstMessageMode": "assistant-speaks-first",
             "firstMessage": first_message,
-            "messages": [
-                {"role": "system and hub", "content": "You are a nurse assistant who can help patients with health inquiries or transfer them to a family member upon request."}
-            ],
             "model": {
                 "provider": "openai",
                 "model": "gpt-3.5-turbo"
@@ -115,8 +282,8 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
                 "model": "nova-2"
             },
             "voice": {
-                "provider": "cartesia",
-                "voiceId": "ae0c424a-4330-4a0a-bc73-f20448ad7c3c",
+                "provider": "azure",
+                "voiceId": voice_id,
                 "fillerInjectionEnabled": True,
                 "chunkPlan": {
                     "enabled": True,
@@ -334,6 +501,7 @@ def create_family(family_id):
 def get_nurse(assistant_id):
     """Retrieve a nurse assistant by ID from the Vapi API."""
     try:
+        print(f'trying to get nurse with id: {assistant_id}')
         # URL for the Vapi API (with assistant ID)
         url = f"https://api.vapi.ai/assistant/{assistant_id}"
         
