@@ -45,7 +45,7 @@ def insertContent():
             return jsonify({'error': 'Embedding failed.'}), 500
 
         # Insert into SingleStore
-        insert_result = insert_to_database(patient_id, text_chunks, embeddings)
+        insert_result = insert_into_database(patient_id, text_chunks, embeddings)
 
         # Check if the insertion was successful
         if not insert_result:
@@ -147,9 +147,12 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
     except Exception as e:
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
     
-import requests
-from flask import Blueprint, request, jsonify
 
+@routes.route('/voice/createFamily/', methods=['POST'])
+def create_family():
+    """Create a family member dynamically using the Vapi API."""
+    
+    pass
 
 @routes.route('/voice/getNurse/<string:assistant_id>', methods=['GET'])
 def get_nurse(assistant_id):
