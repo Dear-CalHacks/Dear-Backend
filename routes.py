@@ -10,7 +10,12 @@ load_dotenv()
 
 routes = Blueprint('routes', __name__)
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+cartesia_key = os.getenv('CARTESIA_API_KEY')
 
+@routes.route('/', methods=['GET'])
+def home():
+    return "hello"
+    
 @routes.route('/db/insertContent', methods=['POST'])
 def insertContent():
     """Process the audio file, transcribe it, tokenize, embed, and insert into SingleStore."""
@@ -149,66 +154,10 @@ def create_nurse(): #only once for nurse, then use call_nurse_assistant
     except Exception as e:
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
     
-@routes.route('/cartesia/Family', methods=['POST'])
-def create_voice():
-    """Creates a voice by sending a request to the Cartesia API with a given embedding."""
-    print('hello')
-    # Get the data from the POST request
-    name = request.json.get('name')
-    description = request.json.get('description')
-    embedding = request.json.get('embedding')
-    language = request.json.get('language', 'en')  # Default to 'en' if not provided
-
-    # Validate the input data
-    if not name or not description or not embedding:
-        return jsonify({"error": "Missing required fields: 'name', 'description', or 'embedding'"}), 400
-
-    # Set the Cartesia API URL
-    cartesia_voice_url = "https://api.cartesia.ai/voices"
-
-    # Prepare the payload for the Cartesia API
-    payload = {
-        "name": name,
-        "description": description,
-        "embedding": embedding,
-        "language": language
-    }
-
-    # Set the headers for the Cartesia API request
-    headers = {
-        "Cartesia-Version": "2024-06-10",
-        "X-API-Key": os.getenv('CARTEISIA_API'),  # Use the API key from your environment
-    }
-
-    # Send the POST request to the Cartesia API to create the voice
-    try:
-        response = requests.post(cartesia_voice_url, json=payload, headers=headers)
-        
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Return the response from the Cartesia API
-            return jsonify({
-                "message": "Voice created successfully", 
-                "data": response.json()
-            }), 200
-        else:
-            # Return an error message with details from the Cartesia API response
-            return jsonify({
-                "error": "Failed to create voice", 
-                "details": response.text
-            }), response.status_code
-    except requests.exceptions.RequestException as e:
-        # Handle any exceptions that occur during the request
-        return jsonify({
-            "error": "An error occurred while creating the voice", 
-            "details": str(e)
-        }), 500
-
-
 @routes.route('/cartesia/cloneVoice', methods=['POST'])
 def clone_voice():
     """Creates a unique voice using an audio clip sent to the Cartesia API."""
-    
+    cartesia_clone_url = "https://api.cartesia.ai/voices/clone/clip"
     # Check if the 'audio' file is in the request
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
@@ -250,6 +199,63 @@ def clone_voice():
             return jsonify({"error": "Failed to create voice", "details": response.text}), response.status_code
     except requests.exceptions.RequestException as e:
         return jsonify({"error": "An error occurred while creating the voice", "details": str(e)}), 500
+
+@routes.route('/cartesia/createVoice', methods=['POST'])
+def create_voice():
+    """Creates a voice by sending a request to the Cartesia API with a given embedding."""
+    print('hello')
+    # Get the data from the POST request
+    name = request.json.get('name')
+    description = request.json.get('description')
+    embedding = request.json.get('embedding')
+    language = request.json.get('language', 'en')  # Default to 'en' if not provided
+
+    # Validate the input data
+    if not name or not description or not embedding:
+        return jsonify({"error": "Missing required fields: 'name', 'description', or 'embedding'"}), 400
+
+    # Set the Cartesia API URL
+    cartesia_voice_url = "https://api.cartesia.ai/voices"
+
+    # Prepare the payload for the Cartesia API
+    payload = {
+        "name": name,
+        "description": description,
+        "embedding": embedding,
+        "language": language
+    }
+
+    # Set the headers for the Cartesia API request
+    headers = {
+        "Cartesia-Version": "2024-06-10",
+        "X-API-Key": cartesia_key,  # Use the API key from your environment
+    }
+
+    # Send the POST request to the Cartesia API to create the voice
+    try:
+        response = requests.post(cartesia_voice_url, json=payload, headers=headers)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Return the response from the Cartesia API
+            return jsonify({
+                "message": "Voice created successfully", 
+                "data": response.json()
+            }), 200
+        else:
+            # Return an error message with details from the Cartesia API response
+            return jsonify({
+                "error": "Failed to create voice", 
+                "details": response.text
+            }), response.status_code
+    except requests.exceptions.RequestException as e:
+        # Handle any exceptions that occur during the request
+        return jsonify({
+            "error": "An error occurred while creating the voice", 
+            "details": str(e)
+        }), 500
+
+
 
 @routes.route('/voice/createFamily/<string:family_id>', methods=['POST'])
 def create_family(family_id):
