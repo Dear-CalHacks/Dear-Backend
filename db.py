@@ -2,7 +2,7 @@ from pymongo import MongoClient
 import os
 
 # MongoDB connection setup
-MONGO_URI = 'mongodb+srv://tirthofficials:tsQzsG7z9M39ewtq@cluster0.iph3z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+MONGO_URI = 'mongodb+srv://rkalaa:knCq2zLWVFjVR2rh@deardb.bj6mx.mongodb.net/?retryWrites=true&w=majority&appName=deardb'
 
 client = MongoClient(MONGO_URI)
 
@@ -19,6 +19,7 @@ def insert_family_member(family_member_data):
     """
     Insert a new family member document into the deardb collection.
     """
+    
     return deardb.insert_one(family_member_data)
 
 def get_family_members(patient_id):

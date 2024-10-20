@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from db import insert_family_member, get_family_members, deardb
 from bson import ObjectId
-from utils import tokenize_text, embed_chunks, insert_into_database, transcribe_audio, create_nurse_assistant
+from utils import insert_into_database, transcribe_audio, create_nurse_assistant
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
@@ -26,7 +26,9 @@ def home():
 @routes.route('/db/insertFamilyMember', methods=['POST'])  # W.I.P
 def insertFamilyMember():
     """Insert a family member into MongoDB."""
+    
     data = request.json
+    print(data)
     result = insert_family_member(data)
     return jsonify({"success": True, "id": str(result.inserted_id)}), 201
 
